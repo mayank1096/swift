@@ -20,8 +20,6 @@ struct SuggestionTextView: View {
             Text(typedText)
                 .foregroundStyle(.white)
                 .background(
-                    // This invisible GeometryReader measures the width of the typed text.
-                    // That width = where the cursor sits = where the torch glow goes.
                     GeometryReader { geo in
                         Color.clear
                             .onAppear {
@@ -40,10 +38,9 @@ struct SuggestionTextView: View {
                     .transition(.opacity.animation(.easeIn(duration: 0.15)))
             }
         }
-        // Figma specs: DM Sans, 20px, weight 400, line-height 90%, letter-spacing -1px
-        .font(.custom("DMSans-Regular", size: 20))
-        .tracking(-1)
-        .lineSpacing(20 * 0.9 - 20) // 90% line-height
+        // Figma: DM Sans, 18px, weight 400, line-height 90%, letter-spacing -0.9px
+        .font(.custom("DMSans-Regular", size: 18))
+        .tracking(-0.9)
         .lineLimit(1)
     }
 }
