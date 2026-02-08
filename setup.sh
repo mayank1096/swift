@@ -296,8 +296,10 @@ class SearchViewModel {
             return
         }
 
+        guard searchText.contains(" ") else { return }
+
         debounceTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             updateSuggestion()
         }

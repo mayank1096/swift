@@ -67,10 +67,14 @@ class SearchViewModel {
             return
         }
 
-        // Start a new 100ms timer
+        // Don't suggest until the user has typed at least one full word
+        // (i.e. the text must contain a space, like "How ")
+        guard searchText.contains(" ") else { return }
+
+        // Start a new 500ms timer
         debounceTask = Task { @MainActor in
-            // Wait 100ms
-            try? await Task.sleep(for: .milliseconds(100))
+            // Wait 500ms after user stops typing
+            try? await Task.sleep(for: .milliseconds(500))
 
             // If this task wasn't cancelled (user didn't type again), compute the suggestion
             guard !Task.isCancelled else { return }
