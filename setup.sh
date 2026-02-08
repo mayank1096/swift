@@ -109,15 +109,18 @@ struct TorchSearchBar: View {
         ZStack(alignment: .leading) {
 
             // Layer 1: The torch glow (behind everything)
+            // Only shows AFTER 100ms debounce + suggestion found
+            // cursorX + 20 accounts for the 20pt left padding on the text
             TorchGlowView(
-                cursorX: viewModel.cursorX,
-                isActive: isFocused && !viewModel.searchText.isEmpty
+                cursorX: viewModel.cursorX + 20,
+                isActive: viewModel.showSuggestion
             )
 
             // Layer 2: The visible text (what the user actually sees)
+            // Gray suggestion only appears when showSuggestion is true
             SuggestionTextView(
                 typedText: viewModel.searchText,
-                suggestion: viewModel.suggestionSuffix,
+                suggestion: viewModel.showSuggestion ? viewModel.suggestionSuffix : "",
                 onCursorXChange: { x in
                     viewModel.cursorX = x
                 }
@@ -277,6 +280,7 @@ class SearchViewModel {
 
     private(set) var suggestionSuffix: String = ""
     private(set) var fullSuggestion: String = ""
+    private(set) var showSuggestion: Bool = false
     var cursorX: CGFloat = 0
 
     private let provider = SuggestionProvider()
@@ -284,6 +288,7 @@ class SearchViewModel {
 
     private func debouncedAutocomplete() {
         debounceTask?.cancel()
+        showSuggestion = false
 
         if searchText.isEmpty {
             suggestionSuffix = ""
@@ -302,9 +307,11 @@ class SearchViewModel {
         if let match = provider.topSuggestion(for: searchText) {
             fullSuggestion = match
             suggestionSuffix = String(match.dropFirst(searchText.count))
+            showSuggestion = true
         } else {
             fullSuggestion = ""
             suggestionSuffix = ""
+            showSuggestion = false
         }
     }
 
@@ -313,6 +320,7 @@ class SearchViewModel {
         searchText = fullSuggestion
         suggestionSuffix = ""
         fullSuggestion = ""
+        showSuggestion = false
     }
 }
 SWIFT

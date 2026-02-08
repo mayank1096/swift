@@ -29,6 +29,11 @@ class SearchViewModel {
     /// Used when the user "accepts" the suggestion.
     private(set) var fullSuggestion: String = ""
 
+    /// Controls whether the torch glow AND the gray suggestion text are visible.
+    /// Only becomes true AFTER the 100ms debounce completes and a suggestion is found.
+    /// This means: while the user is actively typing, no torch and no gray text.
+    private(set) var showSuggestion: Bool = false
+
     // MARK: - Cursor tracking
 
     /// The X position (in points) of where the typed text ends.
@@ -52,6 +57,9 @@ class SearchViewModel {
         // Cancel the previous timer (user is still typing)
         debounceTask?.cancel()
 
+        // While typing, hide torch + suggestion immediately
+        showSuggestion = false
+
         // If the user cleared the field, immediately clear suggestions
         if searchText.isEmpty {
             suggestionSuffix = ""
@@ -71,14 +79,17 @@ class SearchViewModel {
     }
 
     /// Looks up the best suggestion and splits it into the suffix part.
+    /// Also turns on showSuggestion so the torch + gray text appear together.
     private func updateSuggestion() {
         if let match = provider.topSuggestion(for: searchText) {
             fullSuggestion = match
             // Drop the part the user already typed to get just the suggestion tail
             suggestionSuffix = String(match.dropFirst(searchText.count))
+            showSuggestion = true
         } else {
             fullSuggestion = ""
             suggestionSuffix = ""
+            showSuggestion = false
         }
     }
 
@@ -90,5 +101,6 @@ class SearchViewModel {
         searchText = fullSuggestion
         suggestionSuffix = ""
         fullSuggestion = ""
+        showSuggestion = false
     }
 }
