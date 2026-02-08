@@ -1,22 +1,14 @@
 import SwiftUI
 
-/// Renders the two parts of text side by side:
-///   "How to make"  (white, what the user typed)
-///   "an excuse"    (faded white, the suggestion)
-///
-/// Also measures the width of the typed text so we know exactly
-/// where to put the torch glow (at the cursor position).
 struct SuggestionTextView: View {
     let typedText: String
     let suggestion: String
 
-    /// Called whenever the typed text width changes,
-    /// so the parent can position the torch glow at the cursor.
     var onCursorXChange: ((CGFloat) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
-            // ── The bright white text the user typed ──
+            // The bright white text the user typed
             Text(typedText)
                 .foregroundStyle(.white)
                 .background(
@@ -31,16 +23,27 @@ struct SuggestionTextView: View {
                     }
                 )
 
-            // ── The faded suggestion text ──
+            // The faded suggestion text with slide-up animation
+            // Each time `suggestion` changes, the old text slides up and fades out,
+            // and the new text slides in from below.
             if !suggestion.isEmpty {
                 Text(suggestion)
                     .foregroundStyle(.white.opacity(0.3))
-                    .transition(.opacity.animation(.easeIn(duration: 0.15)))
+                    .id(suggestion) // forces SwiftUI to treat each suggestion as a new view
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        )
+                    )
+                    .animation(.easeInOut(duration: 0.3), value: suggestion)
             }
         }
-        // Figma: DM Sans, 18px, weight 400, line-height 90%, letter-spacing -0.9px
+        // Figma: DM Sans, 18px, weight 400, letter-spacing -0.9px
         .font(.custom("DMSans-Regular", size: 18))
         .tracking(-0.9)
         .lineLimit(1)
+        .clipped() // clip the sliding text so it doesn't overflow
+        .animation(.easeInOut(duration: 0.3), value: suggestion)
     }
 }

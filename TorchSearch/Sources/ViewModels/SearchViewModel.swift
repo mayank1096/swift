@@ -1,110 +1,125 @@
 import SwiftUI
 
-/// The "brain" of the search bar.
-///
-/// It keeps track of:
-/// - What the user has typed (`searchText`)
-/// - What we're suggesting (`suggestionSuffix`) — the gray part
-/// - Where the cursor is on screen (`cursorX`) — so the torch glow knows where to sit
-///
-/// It also handles "debouncing": waiting 100ms after the user stops typing
-/// before computing a suggestion, so we don't waste work on every single keystroke.
 @Observable
 class SearchViewModel {
 
     // MARK: - What the user typed
 
-    /// The actual text the user has entered. Bound to the invisible TextField.
     var searchText: String = "" {
         didSet { debouncedAutocomplete() }
     }
 
     // MARK: - Suggestion state
 
-    /// Just the part we're suggesting (e.g. "an excuse" if the full match is "How to make an excuse").
-    /// This is the gray text shown after the cursor.
+    /// The currently displayed suggestion suffix (the gray text after the cursor).
+    /// This changes as the carousel rotates through suggestions.
     private(set) var suggestionSuffix: String = ""
 
-    /// The full suggested phrase (typed part + suggestion part combined).
-    /// Used when the user "accepts" the suggestion.
+    /// The full suggested phrase for the current carousel item.
     private(set) var fullSuggestion: String = ""
 
-    /// Controls whether the torch glow AND the gray suggestion text are visible.
-    /// Only becomes true AFTER the 100ms debounce completes and a suggestion is found.
-    /// This means: while the user is actively typing, no torch and no gray text.
+    /// Controls visibility of torch glow + suggestion text.
     private(set) var showSuggestion: Bool = false
+
+    /// All matching suffixes for the carousel (e.g. ["an excuse", "a website", "pasta", "money online"]).
+    private(set) var allSuggestionSuffixes: [String] = []
+
+    /// Which carousel item is currently showing (0, 1, 2, 3...).
+    private(set) var currentSuggestionIndex: Int = 0
 
     // MARK: - Cursor tracking
 
-    /// The X position (in points) of where the typed text ends.
-    /// The torch glow trapezoid is positioned here.
     var cursorX: CGFloat = 0
 
     // MARK: - Private
 
-    /// Our dictionary of suggestions.
     private let provider = SuggestionProvider()
-
-    /// The debounce timer task. We cancel the old one each time the user types,
-    /// so only the LAST keystroke (after 100ms of silence) triggers a suggestion lookup.
     private var debounceTask: Task<Void, Never>?
+    private var carouselTask: Task<Void, Never>?
 
     // MARK: - Debounce logic
 
-    /// Called every time `searchText` changes.
-    /// Cancels any pending suggestion lookup and starts a new 100ms timer.
     private func debouncedAutocomplete() {
-        // Cancel the previous timer (user is still typing)
         debounceTask?.cancel()
-
-        // While typing, hide torch + suggestion immediately
+        carouselTask?.cancel()
         showSuggestion = false
 
-        // If the user cleared the field, immediately clear suggestions
         if searchText.isEmpty {
             suggestionSuffix = ""
             fullSuggestion = ""
+            allSuggestionSuffixes = []
             return
         }
 
-        // Don't suggest until the user has typed at least one full word
-        // (i.e. the text must contain a space, like "How ")
         guard searchText.contains(" ") else { return }
 
-        // Start a new 500ms timer
         debounceTask = Task { @MainActor in
-            // Wait 500ms after user stops typing
             try? await Task.sleep(for: .milliseconds(500))
-
-            // If this task wasn't cancelled (user didn't type again), compute the suggestion
             guard !Task.isCancelled else { return }
             updateSuggestion()
         }
     }
 
-    /// Looks up the best suggestion and splits it into the suffix part.
-    /// Also turns on showSuggestion so the torch + gray text appear together.
+    /// Finds all matching suggestions and starts the carousel.
     private func updateSuggestion() {
-        if let match = provider.topSuggestion(for: searchText) {
-            fullSuggestion = match
-            // Drop the part the user already typed to get just the suggestion tail
-            suggestionSuffix = String(match.dropFirst(searchText.count))
-            showSuggestion = true
-        } else {
+        let matches = provider.multipleSuggestions(for: searchText, limit: 4)
+
+        guard !matches.isEmpty else {
             fullSuggestion = ""
             suggestionSuffix = ""
             showSuggestion = false
+            allSuggestionSuffixes = []
+            return
+        }
+
+        // Build the suffix list (drop the typed part from each match)
+        allSuggestionSuffixes = matches.map { String($0.dropFirst(searchText.count)) }
+        currentSuggestionIndex = 0
+
+        // Show the first suggestion
+        fullSuggestion = matches[0]
+        suggestionSuffix = allSuggestionSuffixes[0]
+        showSuggestion = true
+
+        // Start carousel if there are multiple suggestions
+        if allSuggestionSuffixes.count > 1 {
+            startCarousel()
+        }
+    }
+
+    /// Cycles through suggestions every 0.8 seconds with animation.
+    private func startCarousel() {
+        carouselTask?.cancel()
+        carouselTask = Task { @MainActor in
+            // Wait 0.8s before first rotation (let the user read the first one)
+            try? await Task.sleep(for: .milliseconds(800))
+
+            while !Task.isCancelled && showSuggestion {
+                // Move to next suggestion
+                currentSuggestionIndex = (currentSuggestionIndex + 1) % allSuggestionSuffixes.count
+                suggestionSuffix = allSuggestionSuffixes[currentSuggestionIndex]
+
+                // Update fullSuggestion for accept-on-swipe
+                let matches = provider.multipleSuggestions(for: searchText, limit: 4)
+                if currentSuggestionIndex < matches.count {
+                    fullSuggestion = matches[currentSuggestionIndex]
+                }
+
+                // Wait 0.8s before next rotation
+                try? await Task.sleep(for: .milliseconds(800))
+            }
         }
     }
 
     // MARK: - Accept suggestion
 
-    /// When the user taps to accept the suggestion, fill in the full text.
     func acceptSuggestion() {
         guard !fullSuggestion.isEmpty else { return }
+        carouselTask?.cancel()
         searchText = fullSuggestion
         suggestionSuffix = ""
         fullSuggestion = ""
         showSuggestion = false
+        allSuggestionSuffixes = []
     }
 }
